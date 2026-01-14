@@ -1,0 +1,90 @@
+name: SCIP Index
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scip-java:
+    name: SCIP Java Index
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check Out Code
+        uses: actions/checkout@v6
+
+      - name: Set Up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: liberica
+          java-version: '17'
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@4d9f0ba0025fe599b4ebab900eb7f3a1d93ef4c2 # v5.0.0
+        with:
+          cache-read-only: true
+
+      - name: Install Coursier
+        run: |
+          curl -fLo coursier https://github.com/coursier/launchers/raw/master/coursier
+          chmod +x coursier
+
+      - name: Install scip-java
+        run: |
+          ./coursier bootstrap --standalone -o scip-java com.sourcegraph:scip-java_2.13:0.11.2 --main com.sourcegraph.scip_java.ScipJava
+
+      - name: Generate SCIP Index
+        run: ./scip-java index
+
+      - name: Install src CLI
+        run: |
+          curl -L https://sourcegraph.com/.api/src-cli/src_linux_amd64 -o src
+          chmod +x src
+
+      - name: Upload SCIP Index
+        run: ./src code-intel upload -github-token='${{ secrets.GITHUB_TOKEN }}' -no-progress
+        env:
+          SRC_ENDPOINT: https://sourcegraph.com
+          SRC_ACCESS_TOKEN: ${{ secrets.SRC_ACCESS_TOKEN }}
+
+  scip-typescript:
+    name: SCIP TypeScript Index
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: framework-docs
+    steps:
+      - name: Check Out Code
+        uses: actions/checkout@v6
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Install scip-typescript
+        run: npm install -g @sourcegraph/scip-typescript
+
+      - name: Generate SCIP Index
+        run: scip-typescript index
+
+      - name: Install src CLI
+        run: |
+          curl -L https://sourcegraph.com/.api/src-cli/src_linux_amd64 -o src
+          chmod +x src
+
+      - name: Upload SCIP Index
+        run: ./src code-intel upload -github-token='${{ secrets.GITHUB_TOKEN }}' -no-progress
+        env:
+          SRC_ENDPOINT: https://sourcegraph.com
+          SRC_ACCESS_TOKEN: ${{ secrets.SRC_ACCESS_TOKEN }}
